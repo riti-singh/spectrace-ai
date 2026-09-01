@@ -1,0 +1,1 @@
+"""Spectrace AI application package."""

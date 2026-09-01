@@ -1,0 +1,349 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Initial satellite acquisition",
+      "normative_text": "The terminal shall acquire an authorized Asteria satellite and establish a forward-link lock within 120 seconds of cold start when the elevation is at least 20 degrees and the sky view is unobstructed.",
+      "requirement_type": "performance",
+      "priority": "critical",
+      "source_section": "3.1.1 Acquisition",
+      "verification_method": "test",
+      "component_ids": ["CMP-001", "CMP-002", "CMP-003"],
+      "risk_ids": ["RSK-001"],
+      "dependency_ids": []
+    },
+    {
+      "id": "REQ-002",
+      "title": "Network authentication before service",
+      "normative_text": "The terminal shall mutually authenticate with the Asteria network using device-bound credentials before permitting subscriber traffic on any bearer.",
+      "requirement_type": "security",
+      "priority": "critical",
+      "source_section": "3.2.1 Access Security",
+      "verification_method": "test",
+      "component_ids": ["CMP-003", "CMP-006"],
+      "risk_ids": ["RSK-005"],
+      "dependency_ids": ["REQ-001"]
+    },
+    {
+      "id": "REQ-003",
+      "title": "Active satellite handoff continuity",
+      "normative_text": "The terminal shall complete an active make-before-break handoff between visible Asteria satellites with no more than 1000 milliseconds of user-plane interruption.",
+      "requirement_type": "performance",
+      "priority": "critical",
+      "source_section": "3.1.2 Mobility",
+      "verification_method": "test",
+      "component_ids": ["CMP-001", "CMP-002", "CMP-003"],
+      "risk_ids": ["RSK-002"],
+      "dependency_ids": ["REQ-001", "REQ-002"]
+    },
+    {
+      "id": "REQ-004",
+      "title": "Loss-of-link recovery",
+      "normative_text": "The terminal shall detect loss of the serving link within 2 seconds and restore an authenticated bearer through reacquisition within 30 seconds when a suitable satellite is visible.",
+      "requirement_type": "reliability",
+      "priority": "critical",
+      "source_section": "3.1.3 Link Recovery",
+      "verification_method": "test",
+      "component_ids": ["CMP-001", "CMP-002", "CMP-003"],
+      "risk_ids": ["RSK-001", "RSK-002"],
+      "dependency_ids": ["REQ-001", "REQ-002"]
+    },
+    {
+      "id": "REQ-005",
+      "title": "Thermal transmit-power protection",
+      "normative_text": "The terminal shall reduce RF transmit power when the power-amplifier temperature reaches 85 degrees Celsius and shall report the thermal-limiting state within 1 second.",
+      "requirement_type": "safety",
+      "priority": "high",
+      "source_section": "3.5.1 Thermal Protection",
+      "verification_method": "test",
+      "component_ids": ["CMP-002", "CMP-005"],
+      "risk_ids": ["RSK-003"],
+      "dependency_ids": []
+    },
+    {
+      "id": "REQ-006",
+      "title": "Over-temperature safe shutdown",
+      "normative_text": "The terminal shall inhibit RF transmission and enter a recoverable safe state before any monitored power-amplifier temperature exceeds 95 degrees Celsius.",
+      "requirement_type": "safety",
+      "priority": "critical",
+      "source_section": "3.5.1 Thermal Protection",
+      "verification_method": "test",
+      "component_ids": ["CMP-002", "CMP-004", "CMP-005"],
+      "risk_ids": ["RSK-003"],
+      "dependency_ids": ["REQ-005"]
+    },
+    {
+      "id": "REQ-007",
+      "title": "Idle power management",
+      "normative_text": "The terminal shall consume no more than 25 watts averaged over 10 minutes while registered, idle, and operating at an ambient temperature of 25 degrees Celsius.",
+      "requirement_type": "performance",
+      "priority": "medium",
+      "source_section": "3.4.1 Power States",
+      "verification_method": "test",
+      "component_ids": ["CMP-004", "CMP-005"],
+      "risk_ids": ["RSK-004"],
+      "dependency_ids": ["REQ-002"]
+    },
+    {
+      "id": "REQ-008",
+      "title": "Input-power interruption hold-up",
+      "normative_text": "The terminal shall preserve security state and configuration without corruption through an input-power interruption lasting up to 100 milliseconds.",
+      "requirement_type": "reliability",
+      "priority": "high",
+      "source_section": "3.4.2 Power Integrity",
+      "verification_method": "test",
+      "component_ids": ["CMP-004", "CMP-006"],
+      "risk_ids": ["RSK-004", "RSK-005"],
+      "dependency_ids": []
+    },
+    {
+      "id": "REQ-009",
+      "title": "Authenticated secure boot",
+      "normative_text": "The terminal shall execute only firmware images whose signature and rollback-protection metadata are validated by the hardware root of trust during boot.",
+      "requirement_type": "security",
+      "priority": "critical",
+      "source_section": "3.6.1 Platform Integrity",
+      "verification_method": "test",
+      "component_ids": ["CMP-006", "CMP-007"],
+      "risk_ids": ["RSK-006"],
+      "dependency_ids": []
+    },
+    {
+      "id": "REQ-010",
+      "title": "Fail-safe firmware update",
+      "normative_text": "The terminal shall authenticate each firmware update package and automatically restore the last known-good image when installation or post-update health checks fail.",
+      "requirement_type": "reliability",
+      "priority": "high",
+      "source_section": "3.6.2 Software Update",
+      "verification_method": "test",
+      "component_ids": ["CMP-006", "CMP-007"],
+      "risk_ids": ["RSK-006"],
+      "dependency_ids": ["REQ-009"]
+    },
+    {
+      "id": "REQ-011",
+      "title": "Emergency-service traffic priority",
+      "normative_text": "The terminal shall prioritize authenticated emergency-service traffic over best-effort subscriber traffic during congestion without bypassing network admission controls.",
+      "requirement_type": "functional",
+      "priority": "critical",
+      "source_section": "3.3.1 Quality of Service",
+      "verification_method": "test",
+      "component_ids": ["CMP-002", "CMP-003", "CMP-006"],
+      "risk_ids": ["RSK-007"],
+      "dependency_ids": ["REQ-002"]
+    },
+    {
+      "id": "REQ-012",
+      "title": "Post-emergency queue restoration",
+      "normative_text": "The terminal shall restore configured subscriber traffic scheduling within 5 seconds after the emergency-service priority condition is cleared by the network.",
+      "requirement_type": "functional",
+      "priority": "medium",
+      "source_section": "3.3.1 Quality of Service",
+      "verification_method": "test",
+      "component_ids": ["CMP-002", "CMP-003"],
+      "risk_ids": ["RSK-007"],
+      "dependency_ids": ["REQ-011"]
+    },
+    {
+      "id": "REQ-013",
+      "title": "Operational health telemetry",
+      "normative_text": "The terminal shall report link state, serving-satellite identifier, power state, thermal state, and software version to the management service at least once every 60 seconds.",
+      "requirement_type": "interface",
+      "priority": "medium",
+      "source_section": "3.7.1 Management Telemetry",
+      "verification_method": "demonstration",
+      "component_ids": ["CMP-003", "CMP-004", "CMP-005", "CMP-007"],
+      "risk_ids": ["RSK-003"],
+      "dependency_ids": ["REQ-002"]
+    },
+    {
+      "id": "REQ-014",
+      "title": "Position and time input",
+      "normative_text": "The terminal shall ingest authenticated position and time data from the navigation subsystem and shall flag inputs older than 10 seconds as stale.",
+      "requirement_type": "interface",
+      "priority": "high",
+      "source_section": "3.1.4 Navigation Interface",
+      "verification_method": "test",
+      "component_ids": ["CMP-001", "CMP-003"],
+      "risk_ids": ["RSK-001"],
+      "dependency_ids": []
+    },
+    {
+      "id": "REQ-015",
+      "title": "Adaptive link operation",
+      "normative_text": "The terminal shall select only network-authorized modulation and coding profiles in response to measured link quality and shall prevent profile oscillation faster than once per second.",
+      "requirement_type": "functional",
+      "priority": "high",
+      "source_section": "3.1.5 Link Adaptation",
+      "verification_method": "test",
+      "component_ids": ["CMP-002", "CMP-003"],
+      "risk_ids": ["RSK-001"],
+      "dependency_ids": ["REQ-001"]
+    },
+    {
+      "id": "REQ-016",
+      "title": "Device credential rotation",
+      "normative_text": "The terminal shall install a network-authorized replacement device credential atomically and retain the prior credential only until successful authentication is confirmed.",
+      "requirement_type": "security",
+      "priority": "high",
+      "source_section": "3.2.2 Credential Lifecycle",
+      "verification_method": "test",
+      "component_ids": ["CMP-003", "CMP-006"],
+      "risk_ids": ["RSK-005"],
+      "dependency_ids": ["REQ-002"]
+    }
+  ],
+  "components": [
+    {
+      "id": "CMP-001",
+      "name": "Electronically Steered Antenna",
+      "description": "Ka-band phased-array aperture, beam steering, and satellite tracking electronics."
+    },
+    {
+      "id": "CMP-002",
+      "name": "RF and Baseband Modem",
+      "description": "Radio-frequency chain, waveform processing, coding, and user-plane scheduling."
+    },
+    {
+      "id": "CMP-003",
+      "name": "Network Control Processor",
+      "description": "Acquisition, mobility, session control, navigation, and management-plane software."
+    },
+    {
+      "id": "CMP-004",
+      "name": "Power Management Unit",
+      "description": "Input protection, conversion rails, energy monitoring, and controlled power states."
+    },
+    {
+      "id": "CMP-005",
+      "name": "Thermal Control Subsystem",
+      "description": "Temperature sensing, fan control, throttling policy, and shutdown interlocks."
+    },
+    {
+      "id": "CMP-006",
+      "name": "Hardware Security Module",
+      "description": "Device identity, key storage, signature verification, and anti-rollback state."
+    },
+    {
+      "id": "CMP-007",
+      "name": "Firmware Manager",
+      "description": "Image download, staged installation, health evaluation, and recovery management."
+    }
+  ],
+  "risks": [
+    {
+      "id": "RSK-001",
+      "title": "Inability to acquire or sustain a satellite link",
+      "description": "Pointing, timing, interference, or link-margin faults can prevent network access.",
+      "severity": "critical",
+      "mitigation": "Validate acquisition envelopes and adaptive-link behavior under channel impairment."
+    },
+    {
+      "id": "RSK-002",
+      "title": "Service interruption during mobility",
+      "description": "Late or failed handoff can interrupt active subscriber and emergency sessions.",
+      "severity": "high",
+      "mitigation": "Exercise predictive handoff and bounded recovery across orbital visibility transitions."
+    },
+    {
+      "id": "RSK-003",
+      "title": "Thermal damage or unsafe enclosure temperature",
+      "description": "Sustained RF load or cooling failure can exceed component operating limits.",
+      "severity": "critical",
+      "mitigation": "Use independent sensors, staged throttling, shutdown interlocks, and telemetry."
+    },
+    {
+      "id": "RSK-004",
+      "title": "Power instability or excess consumption",
+      "description": "Transient input loss or inefficient idle operation can cause resets or site overload.",
+      "severity": "high",
+      "mitigation": "Verify hold-up behavior, rail supervision, and bounded consumption in each power state."
+    },
+    {
+      "id": "RSK-005",
+      "title": "Unauthorized network access",
+      "description": "Compromised or mishandled credentials may allow impersonation or traffic exposure.",
+      "severity": "critical",
+      "mitigation": "Bind credentials to hardware, require mutual authentication, and rotate atomically."
+    },
+    {
+      "id": "RSK-006",
+      "title": "Compromised or unusable firmware",
+      "description": "Malicious, corrupt, or incompatible firmware can subvert or disable the terminal.",
+      "severity": "critical",
+      "mitigation": "Enforce signed boot, anti-rollback policy, redundant images, and health-based recovery."
+    },
+    {
+      "id": "RSK-007",
+      "title": "Emergency traffic starvation",
+      "description": "Congestion or scheduler defects can delay safety-critical emergency communications.",
+      "severity": "critical",
+      "mitigation": "Reserve controlled priority treatment and test congestion entry and exit behavior."
+    }
+  ],
+  "test_cases": [
+    {
+      "id": "TST-001",
+      "title": "Cold-start acquisition envelope",
+      "objective": "Measure cold-start acquisition time across minimum elevation and nominal channel conditions.",
+      "requirement_ids": ["REQ-001"],
+      "status": "approved"
+    },
+    {
+      "id": "TST-002",
+      "title": "Mutual authentication access control",
+      "objective": "Verify valid authentication and confirm subscriber traffic is blocked for invalid credentials.",
+      "requirement_ids": ["REQ-002"],
+      "status": "automated"
+    },
+    {
+      "id": "TST-003",
+      "title": "Orbital handoff and recovery",
+      "objective": "Measure user-plane interruption during handoff and restoration after forced serving-link loss.",
+      "requirement_ids": ["REQ-003", "REQ-004"],
+      "status": "approved"
+    },
+    {
+      "id": "TST-004",
+      "title": "Thermal protection thresholds",
+      "objective": "Exercise power limiting, telemetry indication, and safe shutdown at controlled temperatures.",
+      "requirement_ids": ["REQ-005", "REQ-006"],
+      "status": "approved"
+    },
+    {
+      "id": "TST-005",
+      "title": "Registered-idle power consumption",
+      "objective": "Measure ten-minute average input power under the defined registered and idle condition.",
+      "requirement_ids": ["REQ-007"],
+      "status": "automated"
+    },
+    {
+      "id": "TST-006",
+      "title": "Secure boot and failed update recovery",
+      "objective": "Reject tampered images and verify automatic recovery after a failed update health check.",
+      "requirement_ids": ["REQ-009", "REQ-010"],
+      "status": "approved"
+    },
+    {
+      "id": "TST-007",
+      "title": "Emergency congestion prioritization",
+      "objective": "Confirm admitted emergency traffic receives priority while best-effort traffic is congested.",
+      "requirement_ids": ["REQ-011"],
+      "status": "draft"
+    },
+    {
+      "id": "TST-008",
+      "title": "Navigation input freshness",
+      "objective": "Verify authenticated navigation inputs are accepted and stale inputs are flagged on time.",
+      "requirement_ids": ["REQ-014"],
+      "status": "automated"
+    },
+    {
+      "id": "TST-009",
+      "title": "Adaptive coding stability",
+      "objective": "Verify authorized profile selection and bounded transition rate under varying attenuation.",
+      "requirement_ids": ["REQ-015"],
+      "status": "approved"
+    }
+  ]
+}
