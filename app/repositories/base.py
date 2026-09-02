@@ -1,8 +1,8 @@
 """Repository contracts used by services and API dependencies."""
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
-from app.models import Component, Requirement, Risk, TestCase
+from app.models import Component, GraphNode, GraphPath, Requirement, Risk, TestCase
 
 
 class DataRepository(Protocol):
@@ -17,3 +17,28 @@ class DataRepository(Protocol):
     def list_risks(self) -> list[Risk]: ...
 
     def list_test_cases(self) -> list[TestCase]: ...
+
+    def close(self) -> None: ...
+
+
+@runtime_checkable
+class GraphRepository(DataRepository, Protocol):
+    """Capabilities provided only by an authoritative graph persistence backend."""
+
+    def verify_connectivity(self) -> None: ...
+
+    def transitive_dependencies(self, requirement_id: str, depth: int) -> list[Requirement]: ...
+
+    def downstream_impact(self, requirement_id: str, depth: int) -> list[Requirement]: ...
+
+    def components_for_requirement(self, requirement_id: str) -> list[Component]: ...
+
+    def requirements_for_component(self, component_id: str) -> list[Requirement]: ...
+
+    def shortest_path(self, source_id: str, target_id: str) -> GraphPath | None: ...
+
+    def dependency_cycles(self) -> list[list[str]]: ...
+
+    def unverified_risks(self) -> list[Risk]: ...
+
+    def orphan_nodes(self) -> list[GraphNode]: ...

@@ -172,3 +172,47 @@ class RequirementTraceability(DomainModel):
     direct_dependencies: list[Requirement]
     components: list[Component]
     risks: list[Risk]
+
+
+class GraphEntityType(StrEnum):
+    REQUIREMENT = "Requirement"
+    COMPONENT = "Component"
+    RISK = "Risk"
+    TEST_CASE = "TestCase"
+
+
+class GraphNode(DomainModel):
+    id: str = Field(pattern=r"^(REQ|CMP|RSK|TST)-\d{3}$")
+    entity_type: GraphEntityType
+
+
+class GraphPath(DomainModel):
+    nodes: list[GraphNode] = Field(min_length=1)
+    relationship_types: list[str]
+
+    @model_validator(mode="after")
+    def validate_path_shape(self) -> Self:
+        if len(self.relationship_types) != len(self.nodes) - 1:
+            raise ValueError("a path must contain exactly one relationship between adjacent nodes")
+        return self
+
+
+class DependencyTraversal(DomainModel):
+    requirement_id: RequirementId
+    depth: int = Field(ge=1)
+    requirements: list[Requirement]
+
+
+class DependencyCycle(DomainModel):
+    requirement_ids: list[RequirementId] = Field(min_length=2)
+
+
+class GraphHealth(DomainModel):
+    status: str
+    backend: str
+    database: str
+
+
+class GraphCounts(DomainModel):
+    nodes: dict[GraphEntityType, int]
+    relationships: dict[str, int]
