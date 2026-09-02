@@ -41,3 +41,19 @@ def test_retrieval_endpoint_has_typed_response_and_validation() -> None:
         "results": [],
     }
     assert invalid.status_code == 422
+
+
+def test_retrieval_evaluation_is_available_without_neo4j(client) -> None:
+    response = client.get("/retrieval/evaluation")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["benchmark"] == "asteria-hybrid-retrieval-v1"
+    assert payload["query_count"] == 8
+    assert [item["mode"] for item in payload["metrics"]] == [
+        "lexical",
+        "semantic",
+        "graph",
+        "hybrid",
+    ]
+    assert payload["metrics"][-1]["precision_at_k"] == 0.65

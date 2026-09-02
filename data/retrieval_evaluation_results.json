@@ -1,0 +1,13 @@
+{
+  "benchmark": "asteria-hybrid-retrieval-v1",
+  "dataset": "Asteria synthetic traceability dataset",
+  "query_count": 8,
+  "k": 5,
+  "characterization": "Checked-in results measured against the deterministic synthetic benchmark; not a production relevance claim.",
+  "metrics": [
+    {"mode": "lexical", "precision_at_k": 0.6000, "recall_at_k": 0.7625, "mrr": 0.8750, "ndcg_at_k": 0.8232},
+    {"mode": "semantic", "precision_at_k": 0.6250, "recall_at_k": 0.7670, "mrr": 1.0000, "ndcg_at_k": 0.8524},
+    {"mode": "graph", "precision_at_k": 0.2250, "recall_at_k": 0.2286, "mrr": 0.5000, "ndcg_at_k": 0.1530},
+    {"mode": "hybrid", "precision_at_k": 0.6500, "recall_at_k": 0.7982, "mrr": 0.9375, "ndcg_at_k": 0.8424}
+  ]
+}

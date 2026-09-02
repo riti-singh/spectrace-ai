@@ -1,30 +1,39 @@
 # Spectrace AI
 
-Spectrace AI is a production-oriented requirements traceability and test-planning API for a
-fictional Asteria low-Earth-orbit satellite user terminal. Milestone 3 adds native Neo4j
-full-text search, deterministic local vector embeddings, bounded graph expansion, and explainable
-hybrid rank fusion while retaining both earlier backends and every existing API contract. The
-source data, graph edges, embeddings, relevance judgments, and evaluation are reproducible and
-require no hosted model or secret.
+Spectrace AI is an interactive requirements traceability workspace for a fictional Asteria
+low-Earth-orbit satellite user terminal. Milestone 4 adds a portfolio-quality React and TypeScript
+dashboard to the existing FastAPI and Neo4j backend: executive coverage metrics, unified
+multi-mode retrieval, explainable scoring, an interactive relationship graph, artifact details,
+evidence-gap views, and a checked-in retrieval evaluation. The source data, relationships,
+embeddings, judgments, and UI are deterministic and require no hosted model or secret.
+
+## Product tour
+
+![Spectrace executive dashboard](docs/images/dashboard-overview.png)
+
+![Traceability artifact detail panel](docs/images/artifact-detail.png)
+
+The responsive layout retains the full metric and exploration flow on narrow screens:
+
+<img src="docs/images/dashboard-mobile.png" alt="Spectrace mobile dashboard" width="360">
 
 ## Architecture
 
 ```text
-                         ┌──────────────────────┐
-HTTP / OpenAPI ─────────▶│ FastAPI route layer  │
-                         └──────────┬───────────┘
-                                    │ dependency injection
-                         ┌──────────▼───────────┐
-                         │ Traceability service │
-                         │ Retrieval + WRRF     │
-                         └──────────┬───────────┘
-                                    │ typed repository protocols
-                   ┌────────────────┴────────────────┐
-          ┌────────▼─────────┐             ┌─────────▼─────────┐
-          │ Validated JSON   │             │ Neo4j repository  │
-          │ deterministic    │             │ full-text, vector │
-          │ reference source │             │ and graph indexes │
-          └──────────────────┘             └───────────────────┘
+┌──────────────────────┐     typed HTTP      ┌──────────────────────┐
+│ React + TypeScript   │────────────────────▶│ FastAPI route layer  │
+│ Vite dashboard       │                     └──────────┬───────────┘
+└──────────────────────┘                                │
+                                            ┌───────────▼──────────┐
+                                            │ Traceability service │
+                                            │ Retrieval + WRRF     │
+                                            └───────────┬──────────┘
+                                                        │ typed protocols
+                                         ┌──────────────┴──────────────┐
+                                ┌────────▼─────────┐          ┌────────▼─────────┐
+                                │ Validated JSON   │          │ Neo4j repository │
+                                │ reference source │          │ search + graph   │
+                                └──────────────────┘          └──────────────────┘
 ```
 
 The application creates its selected repository lazily, reuses it for the app lifetime, and closes
@@ -41,10 +50,42 @@ app/
 ├── retrieval/       # Local encoder and standard IR evaluation metrics
 ├── services/        # Traceability, graph, and deterministic rank fusion
 └── main.py          # Application factory and ASGI app
+frontend/             # Vite, React, typed API client, components, and UI tests
 data/                # Domain data and judged synthetic retrieval queries
 scripts/             # Idempotent seeding and retrieval evaluation commands
 tests/               # Unit, contract, API, and isolated Neo4j tests
 ```
+
+The frontend does not maintain a shadow data model. Its executive metrics, gap calculations,
+graph nodes, and artifact relationships are derived from the existing typed API responses. Search
+always calls the backend retrieval contract; when Neo4j is unavailable the UI reports that state
+instead of substituting fabricated results. A single new read-only endpoint,
+`GET /retrieval/evaluation`, exposes the checked-in benchmark snapshot.
+
+## Run the complete product
+
+With Docker and Docker Compose installed, build the dashboard, start Neo4j and FastAPI, seed the
+deterministic graph, and serve the built UI with one command:
+
+```bash
+docker compose up --build
+```
+
+Open [http://127.0.0.1:8000/dashboard/](http://127.0.0.1:8000/dashboard/). The Compose stack uses
+the development-only password `spectrace-local-password` unless `NEO4J_PASSWORD` is supplied.
+The named Neo4j volume persists local data; seeding is additive and idempotent.
+
+For hot-reload development after completing the Python setup below and running
+`corepack enable && pnpm --dir frontend install`:
+
+```bash
+python -m scripts.dev
+```
+
+This starts FastAPI at port 8000 and Vite at
+[http://127.0.0.1:5173/dashboard/](http://127.0.0.1:5173/dashboard/). The default JSON backend
+supports dashboard exploration but intentionally returns a clear unavailable state for native
+Neo4j retrieval. Use the environment configuration below for all four search modes.
 
 ## Graph schema
 
@@ -201,6 +242,7 @@ Neo4j-native retrieval:
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/retrieval/search` | Lexical, semantic, graph, or explainable hybrid retrieval |
+| GET | `/retrieval/evaluation` | Checked-in synthetic benchmark summary |
 
 Examples:
 
@@ -268,6 +310,14 @@ pytest -m "not integration" --cov=app --cov-report=term-missing --cov-fail-under
 git diff --check
 ```
 
+Run the frontend quality gates:
+
+```bash
+pnpm --dir frontend check
+pnpm --dir frontend test
+pnpm --dir frontend build
+```
+
 Neo4j integration tests intentionally reset their target. They refuse to run unless both opt-in and
 isolation confirmation are present. Use only a disposable database/container:
 
@@ -281,8 +331,9 @@ SPECTRACE_NEO4J_TEST_DATABASE=neo4j \
 pytest -m integration
 ```
 
-GitHub Actions starts a fresh Neo4j 5.26 Community service, runs Ruff, enforces the 90% application
-coverage gate, and then runs the isolated integration suite. The suite proves idempotent counts,
+GitHub Actions builds and typechecks the dashboard, runs its interaction tests, starts a fresh
+Neo4j 5.26 Community service, runs Ruff, enforces the 90% application coverage gate, and then runs
+the isolated integration suite. The suite proves idempotent counts,
 repository contract parity, all traceability response parity, bounded traversal, impact, shortest
 paths, cycles, unverified risks, orphan detection, native full-text/vector search, bounded retrieval
 filters, deterministic fusion, and API parity. CI then reseeds and prints the evaluation report;
@@ -323,7 +374,7 @@ this small corpus.
 - Integration tests refuse to start: provide both isolation flags and all `SPECTRACE_NEO4J_TEST_*`
   variables for a disposable database.
 
-## Milestone 3 limitations
+## Milestone 4 limitations
 
 - Neo4j Community supports the configured single database; production tenancy/cluster concerns are
   not addressed.
@@ -342,6 +393,12 @@ this small corpus.
 - WRRF weights and `k` were selected for this small checked-in corpus and require validation before
   use on materially different data.
 - There is no LLM, LangGraph orchestration, GraphRAG generation, or AI-authored engineering claim.
+- The relationship explorer presents a focused neighborhood around one requirement rather than a
+  general-purpose graph authoring surface.
+- Unverified-risk status in the JSON-backed UI is derived from the same requirement and test links;
+  the native `/graph/risks/unverified` endpoint remains Neo4j-only.
+- The frontend has no write workflows, saved searches, pagination, authentication, or multi-user
+  collaboration. The local Compose password is for development only.
 
 ## Roadmap
 
