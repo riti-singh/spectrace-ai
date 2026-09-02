@@ -130,6 +130,7 @@ def test_transitive_depth_and_downstream_impact(
         "REQ-004",
         "REQ-007",
         "REQ-011",
+        "REQ-013",
         "REQ-015",
         "REQ-016",
     ]
