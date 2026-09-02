@@ -85,3 +85,20 @@ class RetrievalResponse(DomainModel):
     mode: RetrievalMode
     result_count: int = Field(ge=0, le=25)
     results: list[RetrievalResult]
+
+
+class RetrievalMetricSummary(DomainModel):
+    mode: RetrievalMode
+    precision_at_k: float = Field(ge=0, le=1)
+    recall_at_k: float = Field(ge=0, le=1)
+    mrr: float = Field(ge=0, le=1)
+    ndcg_at_k: float = Field(ge=0, le=1)
+
+
+class RetrievalEvaluationSummary(DomainModel):
+    benchmark: str
+    dataset: str
+    query_count: int = Field(ge=1)
+    k: int = Field(ge=1)
+    characterization: str
+    metrics: list[RetrievalMetricSummary]
