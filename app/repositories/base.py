@@ -2,7 +2,15 @@
 
 from typing import Protocol, runtime_checkable
 
-from app.models import Component, GraphNode, GraphPath, Requirement, Risk, TestCase
+from app.models import (
+    Component,
+    GraphNode,
+    GraphPath,
+    Requirement,
+    RetrievalCandidate,
+    Risk,
+    TestCase,
+)
 
 
 class DataRepository(Protocol):
@@ -42,3 +50,25 @@ class GraphRepository(DataRepository, Protocol):
     def unverified_risks(self) -> list[Risk]: ...
 
     def orphan_nodes(self) -> list[GraphNode]: ...
+
+
+@runtime_checkable
+class RetrievalRepository(GraphRepository, Protocol):
+    """Native lexical, vector, and graph candidate retrieval capabilities."""
+
+    def lexical_candidates(
+        self, query: str, entity_types: list[str], limit: int
+    ) -> list[RetrievalCandidate]: ...
+
+    def semantic_candidates(
+        self, embedding: list[float], entity_types: list[str], limit: int
+    ) -> list[RetrievalCandidate]: ...
+
+    def graph_candidates(
+        self,
+        seed_ids: list[str],
+        entity_types: list[str],
+        relationships: list[str],
+        depth: int,
+        limit: int,
+    ) -> list[RetrievalCandidate]: ...

@@ -21,6 +21,16 @@ from app.models.domain import (
     TraceabilitySummary,
     VerificationMethod,
 )
+from app.models.retrieval import (
+    GraphRelationshipType,
+    RetrievalCandidate,
+    RetrievalExplanation,
+    RetrievalMode,
+    RetrievalRequest,
+    RetrievalResponse,
+    RetrievalResult,
+    ScoreComponent,
+)
 
 __all__ = [
     "Component",
@@ -32,12 +42,20 @@ __all__ = [
     "GraphHealth",
     "GraphNode",
     "GraphPath",
+    "GraphRelationshipType",
     "Priority",
     "Requirement",
     "RequirementTraceability",
     "RequirementType",
+    "RetrievalCandidate",
+    "RetrievalExplanation",
+    "RetrievalMode",
+    "RetrievalRequest",
+    "RetrievalResponse",
+    "RetrievalResult",
     "Risk",
     "RiskSeverity",
+    "ScoreComponent",
     "TestCase",
     "TestStatus",
     "TraceabilitySummary",

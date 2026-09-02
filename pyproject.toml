@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spectrace-ai"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deterministic requirements traceability for the Asteria LEO terminal"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,6 +27,7 @@ dev = [
 
 [project.scripts]
 spectrace-seed-graph = "scripts.seed_graph:main"
+spectrace-evaluate-retrieval = "scripts.evaluate_retrieval:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app", "scripts"]

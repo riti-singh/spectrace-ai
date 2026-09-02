@@ -1,5 +1,6 @@
 """Neo4j-backed deterministic domain and graph repository."""
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -14,6 +15,7 @@ from app.models import (
     GraphNode,
     GraphPath,
     Requirement,
+    RetrievalCandidate,
     Risk,
     TestCase,
 )
@@ -22,6 +24,8 @@ from app.repositories.exceptions import (
     RepositoryError,
     RepositoryQueryError,
 )
+from app.retrieval import EMBEDDING_DIMENSIONS, DeterministicSemanticEncoder
+from app.retrieval.embedding import entity_search_document
 
 MAX_PATH_DEPTH = 10
 
@@ -43,7 +47,15 @@ INDEX_QUERIES = (
     "CREATE INDEX component_name_index IF NOT EXISTS FOR (node:Component) ON (node.name)",
     "CREATE INDEX risk_severity_index IF NOT EXISTS FOR (node:Risk) ON (node.severity)",
     "CREATE INDEX test_case_status_index IF NOT EXISTS FOR (node:TestCase) ON (node.status)",
+    "CREATE FULLTEXT INDEX trace_entity_fulltext IF NOT EXISTS "
+    "FOR (node:TraceEntity) ON EACH [node.search_text]",
+    "CREATE VECTOR INDEX trace_entity_embedding IF NOT EXISTS "
+    "FOR (node:TraceEntity) ON node.embedding OPTIONS {indexConfig: {"
+    f"`vector.dimensions`: {EMBEDDING_DIMENSIONS}, "
+    "`vector.similarity_function`: 'cosine'}}",
 )
+
+_LUCENE_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 
 LIST_REQUIREMENTS_QUERY = """
 MATCH (requirement:Requirement)
@@ -150,7 +162,10 @@ WITH path, [node IN nodes(path) | node.id] AS path_ids
 ORDER BY path_ids
 LIMIT 1
 RETURN {
-    nodes: [node IN nodes(path) | {id: node.id, entity_type: labels(node)[0]}],
+    nodes: [node IN nodes(path) | {
+        id: node.id,
+        entity_type: [label IN labels(node) WHERE label <> 'TraceEntity'][0]
+    }],
     relationship_types: [edge IN relationships(path) | type(edge)]
 } AS path
 """
@@ -158,7 +173,10 @@ RETURN {
 SELF_PATH_QUERY = """
 MATCH (node {id: $entity_id})
 RETURN {
-    nodes: [{id: node.id, entity_type: labels(node)[0]}],
+    nodes: [{
+        id: node.id,
+        entity_type: [label IN labels(node) WHERE label <> 'TraceEntity'][0]
+    }],
     relationship_types: []
 } AS path
 """
@@ -181,23 +199,84 @@ ORDER BY risk.id
 ORPHAN_NODES_QUERY = """
 MATCH (node)
 WHERE NOT EXISTS { MATCH (node)--() }
-RETURN {id: node.id, entity_type: labels(node)[0]} AS entity
+RETURN {
+    id: node.id,
+    entity_type: [label IN labels(node) WHERE label <> 'TraceEntity'][0]
+} AS entity
 ORDER BY entity.entity_type, entity.id
 """
 
 GRAPH_COUNTS_QUERY = """
-CALL {
+CALL () {
     MATCH (node)
     UNWIND labels(node) AS label
     WITH label, count(node) AS count
     RETURN collect([label, count]) AS node_pairs
 }
-CALL {
+CALL () {
     MATCH ()-[edge]->()
     WITH type(edge) AS relationship_type, count(edge) AS count
     RETURN collect([relationship_type, count]) AS relationship_pairs
 }
 RETURN node_pairs, relationship_pairs
+"""
+
+LEXICAL_CANDIDATES_QUERY = """
+CALL db.index.fulltext.queryNodes(
+    'trace_entity_fulltext', $query, {limit: $candidate_limit}
+) YIELD node, score
+WITH node, score, [label IN labels(node) WHERE label IN $entity_types][0] AS entity_type
+WHERE entity_type IS NOT NULL
+RETURN {
+    id: node.id,
+    entity_type: entity_type,
+    title: coalesce(node.title, node.name, node.id),
+    text: coalesce(node.normative_text, node.description, node.objective, ''),
+    raw_score: score
+} AS candidate
+ORDER BY score DESC, node.id
+LIMIT $limit
+"""
+
+SEMANTIC_CANDIDATES_QUERY = """
+CALL db.index.vector.queryNodes(
+    'trace_entity_embedding', $candidate_limit, $embedding
+) YIELD node, score
+WITH node, score, [label IN labels(node) WHERE label IN $entity_types][0] AS entity_type
+WHERE entity_type IS NOT NULL
+RETURN {
+    id: node.id,
+    entity_type: entity_type,
+    title: coalesce(node.title, node.name, node.id),
+    text: coalesce(node.normative_text, node.description, node.objective, ''),
+    raw_score: score
+} AS candidate
+ORDER BY score DESC, node.id
+LIMIT $limit
+"""
+
+GRAPH_CANDIDATES_QUERY = """
+MATCH (seed:TraceEntity)
+WHERE seed.id IN $seed_ids
+MATCH path = (seed)-[*1..3]-(node:TraceEntity)
+WHERE length(path) <= $depth
+  AND NOT node.id IN $seed_ids
+  AND all(edge IN relationships(path) WHERE type(edge) IN $relationships)
+  AND any(label IN labels(node) WHERE label IN $entity_types)
+WITH node, min(length(path)) AS distance, collect(DISTINCT seed.id) AS anchor_ids
+WITH node, distance, anchor_ids,
+     [label IN labels(node) WHERE label IN $entity_types][0] AS entity_type
+RETURN {
+    id: node.id,
+    entity_type: entity_type,
+    title: coalesce(node.title, node.name, node.id),
+    text: coalesce(node.normative_text, node.description, node.objective, ''),
+    raw_score: 1.0 / distance,
+    graph_distance: distance,
+    anchor_ids: anchor_ids
+} AS candidate
+ORDER BY distance, node.id
+LIMIT $limit
 """
 
 
@@ -249,13 +328,13 @@ class Neo4jRepository:
 
     def list_components(self) -> list[Component]:
         return [
-            Component.model_validate(dict(record["entity"]))
+            Component.model_validate(self._domain_payload(record["entity"]))
             for record in self._execute(LIST_COMPONENTS_QUERY)
         ]
 
     def list_risks(self) -> list[Risk]:
         return [
-            Risk.model_validate(dict(record["entity"]))
+            Risk.model_validate(self._domain_payload(record["entity"]))
             for record in self._execute(LIST_RISKS_QUERY)
         ]
 
@@ -278,7 +357,7 @@ class Neo4jRepository:
 
     def components_for_requirement(self, requirement_id: str) -> list[Component]:
         return [
-            Component.model_validate(dict(record["entity"]))
+            Component.model_validate(self._domain_payload(record["entity"]))
             for record in self._execute(
                 COMPONENTS_FOR_REQUIREMENT_QUERY, {"requirement_id": requirement_id}
             )
@@ -305,7 +384,7 @@ class Neo4jRepository:
 
     def unverified_risks(self) -> list[Risk]:
         return [
-            Risk.model_validate(dict(record["entity"]))
+            Risk.model_validate(self._domain_payload(record["entity"]))
             for record in self._execute(UNVERIFIED_RISKS_QUERY)
         ]
 
@@ -315,9 +394,63 @@ class Neo4jRepository:
             for record in self._execute(ORPHAN_NODES_QUERY)
         ]
 
+    def lexical_candidates(
+        self, query: str, entity_types: list[str], limit: int
+    ) -> list[RetrievalCandidate]:
+        tokens = _LUCENE_TOKEN_PATTERN.findall(query)
+        if not tokens:
+            return []
+        lucene_query = " OR ".join(f'"{token}"' for token in tokens[:40])
+        return self._retrieval_candidates(
+            LEXICAL_CANDIDATES_QUERY,
+            {
+                "query": lucene_query,
+                "entity_types": entity_types,
+                "candidate_limit": min(100, limit * 4),
+                "limit": limit,
+            },
+        )
+
+    def semantic_candidates(
+        self, embedding: list[float], entity_types: list[str], limit: int
+    ) -> list[RetrievalCandidate]:
+        if len(embedding) != EMBEDDING_DIMENSIONS:
+            raise ValueError(f"embedding must contain {EMBEDDING_DIMENSIONS} values")
+        return self._retrieval_candidates(
+            SEMANTIC_CANDIDATES_QUERY,
+            {
+                "embedding": embedding,
+                "entity_types": entity_types,
+                "candidate_limit": min(100, limit * 4),
+                "limit": limit,
+            },
+        )
+
+    def graph_candidates(
+        self,
+        seed_ids: list[str],
+        entity_types: list[str],
+        relationships: list[str],
+        depth: int,
+        limit: int,
+    ) -> list[RetrievalCandidate]:
+        if not seed_ids:
+            return []
+        return self._retrieval_candidates(
+            GRAPH_CANDIDATES_QUERY,
+            {
+                "seed_ids": seed_ids,
+                "entity_types": entity_types,
+                "relationships": relationships,
+                "depth": depth,
+                "limit": limit,
+            },
+        )
+
     def create_schema(self) -> None:
         for query in (*CONSTRAINT_QUERIES, *INDEX_QUERIES):
             self._execute(query, write=True)
+        self._execute("CALL db.awaitIndexes(30)")
 
     def seed_dataset(self, dataset: Dataset, *, reset: bool = False) -> GraphCounts:
         if reset:
@@ -347,30 +480,36 @@ class Neo4jRepository:
         return GraphCounts(nodes=node_counts, relationships=relationship_counts)
 
     def _upsert_nodes(self, dataset: Dataset) -> None:
+        encoder = DeterministicSemanticEncoder()
+
+        def indexed(entity: Any, *, exclude: set[str] | None = None) -> dict[str, Any]:
+            row = entity.model_dump(mode="json", exclude=exclude or set())
+            search_text = entity_search_document(entity)
+            row["search_text"] = search_text
+            row["embedding"] = encoder.encode(search_text)
+            return row
+
         node_batches: Sequence[tuple[str, list[dict[str, Any]]]] = (
             (
-                "UNWIND $rows AS row MERGE (node:Requirement {id: row.id}) SET node = row",
+                "UNWIND $rows AS row MERGE (node:Requirement:TraceEntity {id: row.id}) "
+                "SET node = row",
                 [
-                    item.model_dump(
-                        mode="json", exclude={"component_ids", "risk_ids", "dependency_ids"}
-                    )
+                    indexed(item, exclude={"component_ids", "risk_ids", "dependency_ids"})
                     for item in dataset.requirements
                 ],
             ),
             (
-                "UNWIND $rows AS row MERGE (node:Component {id: row.id}) SET node = row",
-                [item.model_dump(mode="json") for item in dataset.components],
+                "UNWIND $rows AS row MERGE (node:Component:TraceEntity {id: row.id}) "
+                "SET node = row",
+                [indexed(item) for item in dataset.components],
             ),
             (
-                "UNWIND $rows AS row MERGE (node:Risk {id: row.id}) SET node = row",
-                [item.model_dump(mode="json") for item in dataset.risks],
+                "UNWIND $rows AS row MERGE (node:Risk:TraceEntity {id: row.id}) SET node = row",
+                [indexed(item) for item in dataset.risks],
             ),
             (
-                "UNWIND $rows AS row MERGE (node:TestCase {id: row.id}) SET node = row",
-                [
-                    item.model_dump(mode="json", exclude={"requirement_ids"})
-                    for item in dataset.test_cases
-                ],
+                "UNWIND $rows AS row MERGE (node:TestCase:TraceEntity {id: row.id}) SET node = row",
+                [indexed(item, exclude={"requirement_ids"}) for item in dataset.test_cases],
             ),
         )
         for query, rows in node_batches:
@@ -431,16 +570,33 @@ class Neo4jRepository:
 
     @staticmethod
     def _to_requirement(entity: Mapping[str, Any]) -> Requirement:
-        payload = dict(entity)
+        payload = Neo4jRepository._domain_payload(entity)
         for field in ("component_ids", "risk_ids", "dependency_ids"):
             payload[field] = sorted(payload.get(field, []))
         return Requirement.model_validate(payload)
 
     @staticmethod
     def _to_test_case(entity: Mapping[str, Any]) -> TestCase:
-        payload = dict(entity)
+        payload = Neo4jRepository._domain_payload(entity)
         payload["requirement_ids"] = sorted(payload.get("requirement_ids", []))
         return TestCase.model_validate(payload)
+
+    @staticmethod
+    def _domain_payload(entity: Mapping[str, Any]) -> dict[str, Any]:
+        payload = dict(entity)
+        payload.pop("search_text", None)
+        payload.pop("embedding", None)
+        return payload
+
+    def _retrieval_candidates(
+        self, query: str, parameters: Mapping[str, Any]
+    ) -> list[RetrievalCandidate]:
+        candidates: list[RetrievalCandidate] = []
+        for record in self._execute(query, parameters):
+            payload = dict(record["candidate"])
+            payload["anchor_ids"] = sorted(payload.get("anchor_ids", []))
+            candidates.append(RetrievalCandidate.model_validate(payload))
+        return candidates
 
     def _execute(
         self,

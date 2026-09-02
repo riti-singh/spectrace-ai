@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app.api.graph_routes import router as graph_router
+from app.api.retrieval_routes import router as retrieval_router
 from app.api.routes import router
 from app.core.config import Settings, get_settings
 from app.core.dependencies import RepositoryManager
@@ -27,13 +28,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title=active_settings.app_name,
-        version="0.2.0",
+        version="0.3.0",
         summary="Deterministic requirements traceability for the Asteria terminal",
         lifespan=lifespan,
     )
     application.state.repository_manager = manager
     application.include_router(router)
     application.include_router(graph_router)
+    application.include_router(retrieval_router)
 
     @application.exception_handler(RepositoryError)
     async def repository_error_handler(_: Request, exc: RepositoryError) -> JSONResponse:
