@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import Requirement
+from app.models import GraphNode, GraphPath, Requirement
 from app.models import TestCase as DomainTestCase
 
 
@@ -81,4 +81,15 @@ def test_test_case_rejects_duplicate_requirement_links() -> None:
                 "requirement_ids": ["REQ-001", "REQ-001"],
                 "status": "draft",
             }
+        )
+
+
+def test_graph_path_rejects_mismatched_shape() -> None:
+    with pytest.raises(ValidationError, match="one relationship between adjacent nodes"):
+        GraphPath(
+            nodes=[
+                GraphNode(id="REQ-001", entity_type="Requirement"),
+                GraphNode(id="RSK-001", entity_type="Risk"),
+            ],
+            relationship_types=[],
         )

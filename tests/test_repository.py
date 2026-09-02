@@ -8,6 +8,7 @@ import pytest
 from app.repositories import JsonDataRepository
 from app.repositories.json_repository import DatasetLoadError
 from tests.conftest import DATA_FILE
+from tests.repository_contract import assert_asteria_repository_contract
 
 
 def test_repository_returns_stably_sorted_records(repository: JsonDataRepository) -> None:
@@ -19,6 +20,12 @@ def test_repository_returns_stably_sorted_records(repository: JsonDataRepository
     assert len(repository.list_components()) == 7
     assert len(repository.list_risks()) == 7
     assert len(repository.list_test_cases()) == 9
+
+
+def test_json_repository_satisfies_shared_contract(
+    repository: JsonDataRepository,
+) -> None:
+    assert_asteria_repository_contract(repository)
 
 
 @pytest.mark.parametrize(
