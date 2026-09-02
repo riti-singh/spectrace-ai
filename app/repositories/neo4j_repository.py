@@ -105,7 +105,7 @@ RETURN DISTINCT dependency {
         (dependency)-[:DEPENDS_ON]->(direct_dependency:Requirement) | direct_dependency.id
     ]
 } AS entity
-ORDER BY dependency.id
+ORDER BY entity.id
 """
 
 DOWNSTREAM_IMPACT_QUERY = """
@@ -120,7 +120,7 @@ RETURN DISTINCT dependent {
         (dependent)-[:DEPENDS_ON]->(dependency:Requirement) | dependency.id
     ]
 } AS entity
-ORDER BY dependent.id
+ORDER BY entity.id
 """
 
 COMPONENTS_FOR_REQUIREMENT_QUERY = """
