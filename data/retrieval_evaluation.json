@@ -1,0 +1,46 @@
+{
+  "name": "asteria-hybrid-retrieval-v1",
+  "k": 5,
+  "cases": [
+    {
+      "name": "thermal protection verification",
+      "request": {"query": "temperature protection shutdown verification", "entity_types": ["Requirement", "TestCase", "Risk"]},
+      "relevance": {"REQ-005": 3, "REQ-006": 3, "TST-004": 3, "RSK-003": 2}
+    },
+    {
+      "name": "firmware integrity and recovery",
+      "request": {"query": "tampered software image rollback recovery", "entity_types": ["Requirement", "TestCase", "Risk"]},
+      "relevance": {"REQ-009": 3, "REQ-010": 3, "TST-006": 3, "RSK-006": 2}
+    },
+    {
+      "name": "emergency congestion priority",
+      "request": {"query": "emergency traffic starvation during congestion", "entity_types": ["Requirement", "TestCase", "Risk"]},
+      "relevance": {"REQ-011": 3, "REQ-012": 2, "TST-007": 3, "RSK-007": 3}
+    },
+    {
+      "name": "authentication downstream impact",
+      "request": {"query": "REQ-002 downstream dependent requirements", "entity_types": ["Requirement"], "relationships": ["DEPENDS_ON"], "graph_depth": 2},
+      "relevance": {"REQ-003": 3, "REQ-004": 3, "REQ-011": 3, "REQ-016": 3, "REQ-007": 2, "REQ-012": 2, "REQ-013": 2}
+    },
+    {
+      "name": "satellite acquisition chain",
+      "request": {"query": "phased array satellite acquisition", "entity_types": ["Requirement", "Component", "TestCase", "Risk"]},
+      "relevance": {"REQ-001": 3, "CMP-001": 3, "TST-001": 2, "RSK-001": 2}
+    },
+    {
+      "name": "input power interruption",
+      "request": {"query": "brief input energy loss without state corruption", "entity_types": ["Requirement", "Component", "Risk"]},
+      "relevance": {"REQ-008": 3, "CMP-004": 2, "RSK-004": 3}
+    },
+    {
+      "name": "navigation freshness",
+      "request": {"query": "stale authenticated position timing input", "entity_types": ["Requirement", "Component", "TestCase"]},
+      "relevance": {"REQ-014": 3, "TST-008": 3, "CMP-001": 1, "CMP-003": 2}
+    },
+    {
+      "name": "operational monitoring",
+      "request": {"query": "periodic system health monitoring report", "entity_types": ["Requirement", "Component"]},
+      "relevance": {"REQ-013": 3, "CMP-003": 1, "CMP-004": 1, "CMP-005": 2, "CMP-007": 1}
+    }
+  ]
+}

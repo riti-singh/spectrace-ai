@@ -41,7 +41,7 @@ jobs:
         run: ruff format --check .
       - name: Unit tests and coverage
         run: pytest -m "not integration" --cov=app --cov-report=term-missing --cov-fail-under=90
-      - name: Neo4j integration tests
+      - name: Neo4j integration tests and retrieval evaluation
         env:
           SPECTRACE_RUN_NEO4J_TESTS: "1"
           SPECTRACE_NEO4J_TEST_ISOLATED: "1"
@@ -54,4 +54,7 @@ jobs:
           NEO4J_USERNAME: neo4j
           NEO4J_PASSWORD: spectrace-ci-password
           NEO4J_DATABASE: neo4j
-        run: pytest -m integration
+        run: |
+          pytest -m integration
+          python -m scripts.seed_graph --reset
+          python -m scripts.evaluate_retrieval

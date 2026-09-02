@@ -12,9 +12,13 @@ from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.main import create_app
+from app.models import RetrievalRequest
 from app.repositories import JsonDataRepository, Neo4jRepository, load_dataset
+from app.retrieval.evaluation import EvaluationDataset
 from app.services.graph import GraphTraversalService
+from app.services.retrieval import RetrievalService
 from app.services.traceability import TraceabilityService
+from scripts.evaluate_retrieval import evaluate, load_evaluation
 from tests.conftest import DATA_FILE
 from tests.repository_contract import assert_asteria_repository_contract
 
@@ -224,3 +228,92 @@ def test_existing_api_traceability_parity(neo4j_context: Neo4jTestContext) -> No
         ]
         for path in paths:
             assert neo4j_client.get(path).json() == json_client.get(path).json()
+
+
+def test_native_hybrid_retrieval_and_bounded_filters(
+    neo4j_context: Neo4jTestContext,
+) -> None:
+    service = RetrievalService(neo4j_context.repository)
+
+    response = service.search(
+        RetrievalRequest.model_validate(
+            {
+                "query": "thermal temperature shutdown protection",
+                "entity_types": ["Requirement", "TestCase", "Risk"],
+                "relationships": ["VERIFIES", "ADDRESSES", "DEPENDS_ON"],
+                "result_count": 5,
+                "graph_depth": 2,
+            }
+        )
+    )
+
+    assert response.result_count == 5
+    assert "REQ-006" in {item.id for item in response.results}
+    assert all(item.entity_type.value != "Component" for item in response.results)
+    assert all(item.explanation.fusion_method.endswith("k_10") for item in response.results)
+    assert any(item.explanation.graph is not None for item in response.results)
+
+
+def test_retrieval_api_matches_service(neo4j_context: Neo4jTestContext) -> None:
+    application = create_app(
+        Settings(
+            _env_file=None,
+            repository_backend="neo4j",
+            neo4j_uri=neo4j_context.uri,
+            neo4j_username=neo4j_context.username,
+            neo4j_password=SecretStr(neo4j_context.password),
+            neo4j_database=neo4j_context.database,
+        )
+    )
+    payload = {
+        "query": "tampered firmware image recovery",
+        "mode": "hybrid",
+        "entity_types": ["Requirement", "TestCase", "Risk"],
+        "result_count": 4,
+    }
+    with TestClient(application) as client:
+        first = client.post("/retrieval/search", json=payload)
+        second = client.post("/retrieval/search", json=payload)
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["result_count"] == 4
+
+
+def test_checked_in_evaluation_runs_all_modes(neo4j_context: Neo4jTestContext) -> None:
+    dataset: EvaluationDataset = load_evaluation(DATA_FILE.parent / "retrieval_evaluation.json")
+
+    report = evaluate(neo4j_context.repository, dataset)
+
+    assert set(report) == {"lexical", "semantic", "graph", "hybrid"}
+    assert all(
+        0.0 <= value <= 1.0 for mode_metrics in report.values() for value in mode_metrics.values()
+    )
+    expected = {
+        "lexical": {
+            "precision_at_k": 0.6,
+            "recall_at_k": 0.7625,
+            "mrr": 0.875,
+            "ndcg_at_k": 0.8232410371676033,
+        },
+        "semantic": {
+            "precision_at_k": 0.625,
+            "recall_at_k": 0.7669642857142858,
+            "mrr": 1.0,
+            "ndcg_at_k": 0.8523920015313283,
+        },
+        "graph": {
+            "precision_at_k": 0.225,
+            "recall_at_k": 0.22857142857142856,
+            "mrr": 0.5,
+            "ndcg_at_k": 0.15302846884465263,
+        },
+        "hybrid": {
+            "precision_at_k": 0.65,
+            "recall_at_k": 0.7982142857142858,
+            "mrr": 0.9375,
+            "ndcg_at_k": 0.8424440621028894,
+        },
+    }
+    for mode, metrics in expected.items():
+        assert report[mode] == pytest.approx(metrics)

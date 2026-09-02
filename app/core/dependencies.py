@@ -13,8 +13,10 @@ from app.repositories import (
     JsonDataRepository,
     Neo4jRepository,
     RepositoryConnectionError,
+    RetrievalRepository,
 )
 from app.services.graph import GraphTraversalService
+from app.services.retrieval import RetrievalService
 from app.services.traceability import TraceabilityService
 
 
@@ -94,6 +96,21 @@ def get_graph_service(
     return GraphTraversalService(repository)
 
 
+def get_retrieval_service(
+    repository: Annotated[DataRepository, Depends(get_repository)],
+) -> RetrievalService:
+    if not isinstance(repository, RetrievalRepository):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "neo4j_backend_required",
+                "message": "Hybrid retrieval requires SPECTRACE_REPOSITORY_BACKEND=neo4j.",
+            },
+        )
+    return RetrievalService(repository)
+
+
 RepositoryDependency = Annotated[DataRepository, Depends(get_repository)]
 TraceabilityDependency = Annotated[TraceabilityService, Depends(get_traceability_service)]
 GraphDependency = Annotated[GraphTraversalService, Depends(get_graph_service)]
+RetrievalDependency = Annotated[RetrievalService, Depends(get_retrieval_service)]

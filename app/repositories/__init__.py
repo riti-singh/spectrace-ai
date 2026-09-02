@@ -1,6 +1,6 @@
 """Data repository package."""
 
-from app.repositories.base import DataRepository, GraphRepository
+from app.repositories.base import DataRepository, GraphRepository, RetrievalRepository
 from app.repositories.exceptions import (
     DatasetLoadError,
     RepositoryConnectionError,
@@ -20,5 +20,6 @@ __all__ = [
     "RepositoryConnectionError",
     "RepositoryError",
     "RepositoryQueryError",
+    "RetrievalRepository",
     "load_dataset",
 ]

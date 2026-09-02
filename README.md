@@ -1,12 +1,11 @@
 # Spectrace AI
 
 Spectrace AI is a production-oriented requirements traceability and test-planning API for a
-fictional Asteria low-Earth-orbit satellite user terminal. Milestone 2 adds Neo4j persistence and
-bounded graph traversal while retaining the validated JSON backend and every Milestone 1 API
-contract. All graph edges are deterministic projections of the checked-in synthetic dataset.
-
-No LLM, embeddings, LangGraph, GraphRAG, or generated engineering claims are present in this
-milestone.
+fictional Asteria low-Earth-orbit satellite user terminal. Milestone 3 adds native Neo4j
+full-text search, deterministic local vector embeddings, bounded graph expansion, and explainable
+hybrid rank fusion while retaining both earlier backends and every existing API contract. The
+source data, graph edges, embeddings, relevance judgments, and evaluation are reproducible and
+require no hosted model or secret.
 
 ## Architecture
 
@@ -17,14 +16,14 @@ HTTP / OpenAPI ─────────▶│ FastAPI route layer  │
                                     │ dependency injection
                          ┌──────────▼───────────┐
                          │ Traceability service │
-                         │ Graph traversal      │
+                         │ Retrieval + WRRF     │
                          └──────────┬───────────┘
                                     │ typed repository protocols
                    ┌────────────────┴────────────────┐
           ┌────────▼─────────┐             ┌─────────▼─────────┐
           │ Validated JSON   │             │ Neo4j repository  │
-          │ deterministic    │             │ persistence and   │
-          │ reference source │             │ bounded traversal │
+          │ deterministic    │             │ full-text, vector │
+          │ reference source │             │ and graph indexes │
           └──────────────────┘             └───────────────────┘
 ```
 
@@ -35,14 +34,15 @@ details.
 
 ```text
 app/
-├── api/             # Existing HTTP routes plus Neo4j-only graph routes
+├── api/             # Existing routes plus graph and retrieval routes
 ├── core/            # Settings, backend selection, dependency injection, lifecycle
-├── models/          # Strict Pydantic domain and graph response models
+├── models/          # Strict domain, graph, and retrieval request/response models
 ├── repositories/    # JSON/Neo4j adapters, protocols, domain exceptions
-├── services/        # Traceability and bounded graph orchestration
+├── retrieval/       # Local encoder and standard IR evaluation metrics
+├── services/        # Traceability, graph, and deterministic rank fusion
 └── main.py          # Application factory and ASGI app
-data/                # Validated synthetic Asteria dataset
-scripts/             # Idempotent graph seeding command
+data/                # Domain data and judged synthetic retrieval queries
+scripts/             # Idempotent seeding and retrieval evaluation commands
 tests/               # Unit, contract, API, and isolated Neo4j tests
 ```
 
@@ -56,8 +56,10 @@ tests/               # Unit, contract, API, and isolated Neo4j tests
                                   └─[:ADDRESSES]──▶(Risk)
 ```
 
-Neo4j stores only scalar model fields on nodes. Relationship ID arrays are reconstructed from graph
-edges and are never duplicated as node properties.
+Every domain node also has the common `TraceEntity` label. Neo4j stores a generated `search_text`
+property and a 256-dimensional normalized `embedding`; relationship ID arrays are reconstructed
+from graph edges and are never duplicated as node properties. Public domain responses strip both
+internal retrieval properties, preserving earlier JSON/Neo4j response parity.
 
 | Label | Unique ID | Count |
 |---|---:|---:|
@@ -74,14 +76,31 @@ edges and are never duplicated as node properties.
 | `VERIFIES` | TestCase → Requirement | 12 |
 
 Uniqueness constraints protect every domain ID. Secondary indexes cover requirement priority/type,
-component name, risk severity, and test-case status.
+component name, risk severity, and test-case status. `trace_entity_fulltext` is a Lucene full-text
+index and `trace_entity_embedding` is a cosine vector index over the common label.
+
+## Retrieval design
+
+`POST /retrieval/search` is available with the Neo4j backend. It retrieves bounded candidate pools
+from three independent channels:
+
+- lexical relevance from Neo4j full-text search with sanitized query tokens;
+- semantic similarity from Neo4j vector search using a deterministic local concept/token/character
+  feature encoder;
+- graph proximity from one-to-three-hop undirected expansion around exact-ID and top search seeds.
+
+Hybrid mode applies weighted reciprocal-rank fusion with `k=10`: lexical `0.45`, semantic `0.45`,
+and graph `0.10`. Results are ordered by fused score and then entity ID. Each result exposes raw
+score, within-channel normalized score, rank, contribution, graph distance, and graph anchors.
+Entity types, relationship types, graph depth, query length, candidate pools, and returned results
+are enum- or range-bounded; relationship names are never interpolated into Cypher.
 
 ## Backends
 
 `SPECTRACE_REPOSITORY_BACKEND=json` is the safe default. It loads and validates the JSON dataset as
 one referentially sound snapshot. All Milestone 1 endpoints work without external infrastructure.
-Graph endpoints return a structured `503` with code `neo4j_backend_required`, because graph
-traversal is not silently simulated in memory.
+Graph and retrieval endpoints return a structured `503` with code `neo4j_backend_required`, because
+Neo4j-native index and traversal behavior is not silently simulated in memory.
 
 `SPECTRACE_REPOSITORY_BACKEND=neo4j` makes graph relationships authoritative while preserving the
 same domain models, ordering, coverage calculations, and existing API responses. Invalid backend
@@ -121,8 +140,9 @@ to `bolt://localhost:7687`.
 
 ## Seed the graph
 
-The seeder validates `data/asteria_dataset.json`, creates constraints/indexes with `IF NOT EXISTS`,
-uses `MERGE` for every node and edge, and prints authoritative counts.
+The seeder validates `data/asteria_dataset.json`, creates scalar/full-text/vector indexes with
+`IF NOT EXISTS`, generates deterministic embeddings, uses `MERGE` for every node and edge, waits
+for indexes to become online, and prints authoritative counts.
 
 ```bash
 python -m scripts.seed_graph
@@ -176,6 +196,12 @@ Neo4j-only graph endpoints:
 | GET | `/graph/risks/unverified` | Risks without a TestCase→Requirement→Risk path |
 | GET | `/graph/orphans` | Nodes with no relationships |
 
+Neo4j-native retrieval:
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/retrieval/search` | Lexical, semantic, graph, or explainable hybrid retrieval |
+
 Examples:
 
 ```bash
@@ -183,6 +209,19 @@ curl "http://127.0.0.1:8000/graph/requirements/REQ-011/dependencies?depth=2"
 curl "http://127.0.0.1:8000/graph/requirements/REQ-001/impact?depth=3"
 curl "http://127.0.0.1:8000/graph/path?source_id=TST-003&target_id=RSK-002"
 curl http://127.0.0.1:8000/graph/risks/unverified
+```
+
+```bash
+curl -X POST http://127.0.0.1:8000/retrieval/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "tampered firmware image recovery",
+    "mode": "hybrid",
+    "entity_types": ["Requirement", "TestCase", "Risk"],
+    "relationships": ["DEPENDS_ON", "ADDRESSES", "VERIFIES"],
+    "graph_depth": 2,
+    "result_count": 5
+  }'
 ```
 
 Traversal depth is restricted to 1–10. Cypher queries use a static maximum of 10 hops and a
@@ -245,7 +284,33 @@ pytest -m integration
 GitHub Actions starts a fresh Neo4j 5.26 Community service, runs Ruff, enforces the 90% application
 coverage gate, and then runs the isolated integration suite. The suite proves idempotent counts,
 repository contract parity, all traceability response parity, bounded traversal, impact, shortest
-paths, cycles, unverified risks, and orphan detection.
+paths, cycles, unverified risks, orphan detection, native full-text/vector search, bounded retrieval
+filters, deterministic fusion, and API parity. CI then reseeds and prints the evaluation report;
+integration tests are run explicitly and are not counted as passing when skipped.
+
+## Retrieval evaluation
+
+`data/retrieval_evaluation.json` contains eight synthetic queries and graded relevant-result
+judgments. The standard metrics implementation treats relevance greater than zero as a binary hit
+for Precision@K, Recall@K, and MRR, and uses graded gains for nDCG@K. Run the production indexes:
+
+```bash
+python -m scripts.seed_graph --reset   # disposable database only
+python -m scripts.evaluate_retrieval
+```
+
+Measured on the checked-in dataset with Neo4j Community 5.26.0 at `K=5`:
+
+| Mode | Precision@5 | Recall@5 | MRR | nDCG@5 |
+|---|---:|---:|---:|---:|
+| Lexical | 0.6000 | 0.7625 | 0.8750 | 0.8232 |
+| Semantic | 0.6250 | 0.7670 | 1.0000 | 0.8524 |
+| Graph | 0.2250 | 0.2286 | 0.5000 | 0.1530 |
+| Hybrid | 0.6500 | 0.7982 | 0.9375 | 0.8424 |
+
+These are observed synthetic-benchmark results, not production relevance claims. Hybrid improves
+Precision@5 and Recall@5; semantic-only is strongest for first-result rank and graded ordering on
+this small corpus.
 
 ## Troubleshooting
 
@@ -258,7 +323,7 @@ paths, cycles, unverified risks, and orphan detection.
 - Integration tests refuse to start: provide both isolation flags and all `SPECTRACE_NEO4J_TEST_*`
   variables for a disposable database.
 
-## Milestone 2 limitations
+## Milestone 3 limitations
 
 - Neo4j Community supports the configured single database; production tenancy/cluster concerns are
   not addressed.
@@ -270,11 +335,17 @@ paths, cycles, unverified risks, and orphan detection.
   quality.
 - There are no write APIs, pagination, authentication/authorization, migrations, metrics, or tracing.
 - The Asteria dataset is synthetic and not suitable for flight qualification.
-- No LLM, embeddings, hybrid retrieval, LangGraph, GraphRAG, or AI test generation is implemented.
+- The local semantic encoder is deliberately compact and domain-normalized. It has no pretrained
+  language understanding and should be replaced behind the encoder interface for a broader corpus.
+- Graph-only retrieval is weak for free-text queries in the synthetic benchmark; it is most useful
+  with explicit entity IDs or as bounded evidence in fusion.
+- WRRF weights and `k` were selected for this small checked-in corpus and require validation before
+  use on materially different data.
+- There is no LLM, LangGraph orchestration, GraphRAG generation, or AI-authored engineering claim.
 
 ## Roadmap
 
-The next milestone can add versioned graph migrations, evidence ingestion, full-text/vector indexes,
-hybrid deterministic-plus-semantic retrieval, and then LangGraph orchestration with human review.
-Probabilistic components should remain downstream of the validated repository contracts and retain
-deterministic evaluation fixtures for every generated recommendation.
+The next milestone can add versioned graph migrations, evidence ingestion, stronger pluggable local
+or hosted embeddings, and LangGraph orchestration with human review. Probabilistic components should
+remain downstream of the validated repository contracts and retain deterministic evaluation fixtures
+for every generated recommendation.
