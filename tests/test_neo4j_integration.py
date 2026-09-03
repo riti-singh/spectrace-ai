@@ -15,10 +15,11 @@ from app.main import create_app
 from app.models import RetrievalRequest
 from app.repositories import JsonDataRepository, Neo4jRepository, load_dataset
 from app.retrieval.evaluation import EvaluationDataset
+from app.retrieval.report import build_report
 from app.services.graph import GraphTraversalService
 from app.services.retrieval import RetrievalService
 from app.services.traceability import TraceabilityService
-from scripts.evaluate_retrieval import evaluate, load_evaluation
+from scripts.evaluate_retrieval import load_evaluation
 from tests.conftest import DATA_FILE
 from tests.repository_contract import assert_asteria_repository_contract
 
@@ -283,11 +284,16 @@ def test_retrieval_api_matches_service(neo4j_context: Neo4jTestContext) -> None:
 def test_checked_in_evaluation_runs_all_modes(neo4j_context: Neo4jTestContext) -> None:
     dataset: EvaluationDataset = load_evaluation(DATA_FILE.parent / "retrieval_evaluation.json")
 
-    report = evaluate(neo4j_context.repository, dataset)
+    service = RetrievalService(neo4j_context.repository)
+    report = build_report(service.search, dataset, measure_latency=False)
 
-    assert set(report) == {"lexical", "semantic", "graph", "hybrid"}
-    assert all(
-        0.0 <= value <= 1.0 for mode_metrics in report.values() for value in mode_metrics.values()
+    measured = {
+        strategy.mode.value: strategy.metrics.model_dump() for strategy in report.strategies
+    }
+    assert set(measured) == {"lexical", "semantic", "graph", "hybrid"}
+    assert (
+        report.model_dump_json()
+        == build_report(service.search, dataset, measure_latency=False).model_dump_json()
     )
     expected = {
         "lexical": {
@@ -316,4 +322,5 @@ def test_checked_in_evaluation_runs_all_modes(neo4j_context: Neo4jTestContext) -
         },
     }
     for mode, metrics in expected.items():
-        assert report[mode] == pytest.approx(metrics)
+        assert measured[mode] == pytest.approx(metrics)
+    assert report.failure_analysis.findings
