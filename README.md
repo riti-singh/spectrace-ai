@@ -47,7 +47,7 @@ app/
 ├── core/            # Settings, backend selection, dependency injection, lifecycle
 ├── models/          # Strict domain, graph, and retrieval request/response models
 ├── repositories/    # JSON/Neo4j adapters, protocols, domain exceptions
-├── retrieval/       # Local encoder and standard IR evaluation metrics
+├── retrieval/       # Local encoder, IR metrics, strategy comparison, failure analysis
 ├── services/        # Traceability, graph, and deterministic rank fusion
 └── main.py          # Application factory and ASGI app
 frontend/             # Vite, React, typed API client, components, and UI tests
@@ -347,8 +347,51 @@ for Precision@K, Recall@K, and MRR, and uses graded gains for nDCG@K. Run the pr
 
 ```bash
 python -m scripts.seed_graph --reset   # disposable database only
-python -m scripts.evaluate_retrieval
+python -m scripts.evaluate_retrieval --no-latency --json-out /tmp/retrieval_report.json
 ```
+
+The command runs one dataset against every requested strategy, scores the existing metrics,
+compares hybrid with its component strategies, and classifies failures. JSON goes to stdout (or
+`--json-out`) and the human-readable summary goes to stderr, so the JSON stream stays pipeable.
+
+| Flag | Purpose |
+|---|---|
+| `--dataset` | judged dataset to run (default `data/retrieval_evaluation.json`) |
+| `--strategies` | subset of `lexical semantic graph hybrid` to compare |
+| `--depth` | ranks inspected per query; metrics are still scored at the dataset `k` |
+| `--primary-metric` | metric used for hybrid-vs-component comparison (default `ndcg_at_k`) |
+| `--highlight-limit` | number of improvements and regressions to highlight |
+| `--no-latency` | omit measured timings so the JSON is byte-for-byte reproducible |
+| `--json-out` | write the JSON report to a file |
+
+### Dataset format
+
+```json
+{
+  "name": "asteria-hybrid-retrieval-v1",
+  "k": 5,
+  "cases": [
+    {
+      "name": "thermal protection verification",
+      "request": { "query": "temperature protection shutdown verification", "limit": 5 },
+      "relevance": { "REQ-005": 3, "REQ-006": 3, "TST-004": 3, "RSK-003": 2 }
+    }
+  ]
+}
+```
+
+`request` accepts the same fields as the retrieval API (`query`, `limit`, `entity_types`,
+`seed_ids`, `graph_depth`); `mode` is supplied by the harness. Grades are graded gains, and any
+grade greater than zero counts as relevant for Precision@K, Recall@K, and MRR.
+
+### Strategies and metrics
+
+Only the modes the service actually implements are evaluated: `lexical`, `semantic` (the
+vector-only strategy backed by the local encoder and the Neo4j vector index), `graph`, and `hybrid`
+(weighted reciprocal-rank fusion of the three). Each strategy reports Precision@K, Recall@K, MRR,
+nDCG@K, and mean latency, plus a per-query row with the query, relevant IDs, the ranked retrieved
+artifacts with scores and grades, missing IDs, relevant IDs pushed below the cutoff, and the
+per-query metric values.
 
 Measured on the checked-in dataset with Neo4j Community 5.26.0 at `K=5`:
 
@@ -362,6 +405,48 @@ Measured on the checked-in dataset with Neo4j Community 5.26.0 at `K=5`:
 These are observed synthetic-benchmark results, not production relevance claims. Hybrid improves
 Precision@5 and Recall@5; semantic-only is strongest for first-result rank and graded ordering on
 this small corpus.
+
+### Failure analysis
+
+Failure categories are derived only from measured rankings and graded judgments; no LLM is
+involved. Per-query categories are `no_results`, `missing_relevant` (a judged artifact never
+appeared in the inspected ranks), `ranked_below_cutoff` (it was retrieved but ranked outside the
+top `k`), and `top_result_not_relevant`. Cross-strategy categories compare hybrid against the best
+component strategy on the primary metric: `hybrid_improved`, `hybrid_regressed`, `graph_helped` and
+`vector_helped` (the strategy uniquely supplied a relevant artifact that hybrid kept in its top `k`)
+and `graph_hurt` (hybrid promoted a graph-only non-relevant artifact into its top `k` on a query
+where it also scored below the best component).
+
+Example summary for the checked-in dataset:
+
+```text
+strategy        P@K      R@K      MRR   nDCG@K   latency_ms
+lexical      0.6000   0.7625   0.8750   0.8232            -
+semantic     0.6250   0.7670   1.0000   0.8524            -
+graph        0.2250   0.2286   0.5000   0.1530            -
+hybrid       0.6500   0.7982   0.9375   0.8424            -
+
+Failure categories (primary metric ndcg_at_k):
+  graph_hurt              2
+  hybrid_improved         1
+  hybrid_regressed        3
+  missing_relevant        16
+  ranked_below_cutoff     7
+  top_result_not_relevant 3
+  vector_helped           1
+
+Top hybrid improvements:
+  +0.0081 emergency congestion priority (hybrid 1.0000 vs lexical 0.9919)
+
+Top hybrid regressions:
+  -0.1596 authentication downstream impact (hybrid 0.2921 vs graph 0.4517)
+  -0.1143 input power interruption (hybrid 0.8452 vs lexical 0.9595)
+  -0.0494 thermal protection verification (hybrid 0.9506 vs lexical 1.0000)
+```
+
+Read a regression as "fusion diluted a strategy that was already correct for this query": the
+per-query rows in the JSON report show which relevant IDs moved below the cutoff and which
+non-relevant IDs replaced them.
 
 ## Troubleshooting
 
@@ -392,6 +477,10 @@ this small corpus.
   with explicit entity IDs or as bounded evidence in fusion.
 - WRRF weights and `k` were selected for this small checked-in corpus and require validation before
   use on materially different data.
+- Failure categories are rule-based summaries of measured rankings, not causal explanations, and
+  they compare hybrid against single strategies on one primary metric at a time.
+- Measured latency depends on the local machine and warm caches. Use `--no-latency` whenever the
+  JSON report must be compared byte-for-byte.
 - There is no LLM, LangGraph orchestration, GraphRAG generation, or AI-authored engineering claim.
 - The relationship explorer presents a focused neighborhood around one requirement rather than a
   general-purpose graph authoring surface.
