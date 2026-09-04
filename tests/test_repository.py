@@ -28,6 +28,29 @@ def test_json_repository_satisfies_shared_contract(
     assert_asteria_repository_contract(repository)
 
 
+def test_json_repository_supplies_deterministic_retrieval_candidates(
+    repository: JsonDataRepository,
+) -> None:
+    lexical = repository.lexical_candidates("thermal protection", ["Requirement"], 5)
+    semantic = repository.semantic_candidates(
+        repository._encoder.encode("firmware recovery"), ["Requirement", "TestCase"], 5
+    )
+    graph = repository.graph_candidates(
+        ["REQ-002"],
+        ["Requirement"],
+        ["DEPENDS_ON"],
+        2,
+        5,
+    )
+
+    assert lexical
+    assert semantic
+    assert graph
+    assert graph == repository.graph_candidates(
+        ["REQ-002"], ["Requirement"], ["DEPENDS_ON"], 2, 5
+    )
+
+
 @pytest.mark.parametrize(
     ("collection", "field", "broken_id"),
     [

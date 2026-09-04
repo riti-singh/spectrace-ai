@@ -84,8 +84,8 @@ python -m scripts.dev
 
 This starts FastAPI at port 8000 and Vite at
 [http://127.0.0.1:5173/dashboard/](http://127.0.0.1:5173/dashboard/). The default JSON backend
-supports dashboard exploration but intentionally returns a clear unavailable state for native
-Neo4j retrieval. Use the environment configuration below for all four search modes.
+supports dashboard exploration and deterministic local retrieval in all four search modes. Use
+the Neo4j environment configuration below for database-native indexes and graph API routes.
 
 ## Graph schema
 
@@ -140,8 +140,9 @@ are enum- or range-bounded; relationship names are never interpolated into Cyphe
 
 `SPECTRACE_REPOSITORY_BACKEND=json` is the safe default. It loads and validates the JSON dataset as
 one referentially sound snapshot. All Milestone 1 endpoints work without external infrastructure.
-Graph and retrieval endpoints return a structured `503` with code `neo4j_backend_required`, because
-Neo4j-native index and traversal behavior is not silently simulated in memory.
+Retrieval runs locally over that snapshot with deterministic lexical, semantic, and relationship
+candidate generation. Graph API endpoints return a structured `503` with code
+`neo4j_backend_required` because authoritative graph traversal still requires Neo4j.
 
 `SPECTRACE_REPOSITORY_BACKEND=neo4j` makes graph relationships authoritative while preserving the
 same domain models, ordering, coverage calculations, and existing API responses. Invalid backend
@@ -237,7 +238,7 @@ Neo4j-only graph endpoints:
 | GET | `/graph/risks/unverified` | Risks without a TestCase→Requirement→Risk path |
 | GET | `/graph/orphans` | Nodes with no relationships |
 
-Neo4j-native retrieval:
+Retrieval (JSON or Neo4j backend):
 
 | Method | Path | Purpose |
 |---|---|---|

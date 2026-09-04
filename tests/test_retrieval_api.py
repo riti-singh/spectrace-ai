@@ -16,11 +16,13 @@ class StubService:
         )
 
 
-def test_json_backend_rejects_retrieval_without_changing_existing_contract(client) -> None:
+def test_json_backend_supports_local_retrieval(client) -> None:
     response = client.post("/retrieval/search", json={"query": "thermal protection"})
 
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "neo4j_backend_required"
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_count"] > 0
+    assert payload["results"][0]["id"].startswith(("REQ-", "CMP-", "RSK-", "TST-"))
 
 
 def test_retrieval_endpoint_has_typed_response_and_validation() -> None:

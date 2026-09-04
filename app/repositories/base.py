@@ -53,8 +53,8 @@ class GraphRepository(DataRepository, Protocol):
 
 
 @runtime_checkable
-class RetrievalRepository(GraphRepository, Protocol):
-    """Native lexical, vector, and graph candidate retrieval capabilities."""
+class RetrievalRepository(DataRepository, Protocol):
+    """Lexical, vector, and relationship candidate retrieval capabilities."""
 
     def lexical_candidates(
         self, query: str, entity_types: list[str], limit: int
