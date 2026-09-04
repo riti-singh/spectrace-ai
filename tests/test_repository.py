@@ -7,6 +7,7 @@ import pytest
 
 from app.repositories import JsonDataRepository
 from app.repositories.json_repository import DatasetLoadError
+from app.retrieval import EMBEDDING_DIMENSIONS, DeterministicSemanticEncoder
 from tests.conftest import DATA_FILE
 from tests.repository_contract import assert_asteria_repository_contract
 
@@ -26,6 +27,38 @@ def test_json_repository_satisfies_shared_contract(
     repository: JsonDataRepository,
 ) -> None:
     assert_asteria_repository_contract(repository)
+
+
+def test_json_repository_supplies_deterministic_retrieval_candidates(
+    repository: JsonDataRepository,
+) -> None:
+    lexical = repository.lexical_candidates("thermal protection", ["Requirement"], 5)
+    semantic = repository.semantic_candidates(
+        DeterministicSemanticEncoder().encode("firmware recovery"),
+        ["Requirement", "TestCase"],
+        5,
+    )
+    graph = repository.graph_candidates(
+        ["REQ-002"],
+        ["Requirement"],
+        ["DEPENDS_ON"],
+        2,
+        5,
+    )
+
+    assert lexical
+    assert semantic
+    assert graph
+    assert graph == repository.graph_candidates(["REQ-002"], ["Requirement"], ["DEPENDS_ON"], 2, 5)
+
+
+def test_json_retrieval_rejects_partial_and_non_positive_matches(
+    repository: JsonDataRepository,
+) -> None:
+    all_entity_types = ["Requirement", "Component", "Risk", "TestCase"]
+
+    assert repository.lexical_candidates("rm", all_entity_types, 5) == []
+    assert repository.semantic_candidates([0.0] * EMBEDDING_DIMENSIONS, all_entity_types, 5) == []
 
 
 @pytest.mark.parametrize(

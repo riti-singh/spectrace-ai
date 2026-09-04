@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
@@ -16,11 +17,29 @@ class StubService:
         )
 
 
-def test_json_backend_rejects_retrieval_without_changing_existing_contract(client) -> None:
+def test_json_backend_supports_local_retrieval(client) -> None:
     response = client.post("/retrieval/search", json={"query": "thermal protection"})
 
-    assert response.status_code == 503
-    assert response.json()["detail"]["code"] == "neo4j_backend_required"
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["result_count"] > 0
+    assert payload["results"][0]["id"].startswith(("REQ-", "CMP-", "RSK-", "TST-"))
+
+
+@pytest.mark.parametrize("mode", ["semantic", "graph", "hybrid"])
+def test_json_backend_returns_no_results_for_punctuation_only_query(client, mode: str) -> None:
+    response = client.post("/retrieval/search", json={"query": "!!", "mode": mode})
+
+    assert response.status_code == 200
+    assert response.json()["result_count"] == 0
+    assert response.json()["results"] == []
+
+
+def test_json_backend_does_not_match_partial_lexical_tokens(client) -> None:
+    response = client.post("/retrieval/search", json={"query": "rm", "mode": "lexical"})
+
+    assert response.status_code == 200
+    assert response.json()["result_count"] == 0
 
 
 def test_retrieval_endpoint_has_typed_response_and_validation() -> None:
