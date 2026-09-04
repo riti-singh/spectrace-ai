@@ -78,8 +78,12 @@ class JsonDataRepository:
         for record in self._search_records.values():
             if record["entity_type"] not in allowed:
                 continue
-            document = record["document"].lower()
-            score = sum(document.count(token) for token in query_tokens)
+            document_tokens = _TOKEN_PATTERN.findall(record["document"].lower())
+            score = sum(
+                document_token == query_token
+                for query_token in query_tokens
+                for document_token in document_tokens
+            )
             if score:
                 candidates.append(self._candidate(record, float(score)))
         return sorted(candidates, key=lambda item: (-item.raw_score, item.id))[:limit]
@@ -89,14 +93,18 @@ class JsonDataRepository:
     ) -> list[RetrievalCandidate]:
         if len(embedding) != EMBEDDING_DIMENSIONS:
             raise ValueError(f"embedding must contain {EMBEDDING_DIMENSIONS} values")
+        if not any(embedding):
+            return []
         allowed = set(entity_types)
-        candidates = [
-            self._candidate(record, max(0.0, math.fsum(
+        candidates: list[RetrievalCandidate] = []
+        for record in self._search_records.values():
+            if record["entity_type"] not in allowed:
+                continue
+            score = math.fsum(
                 left * right for left, right in zip(embedding, record["embedding"], strict=True)
-            )))
-            for record in self._search_records.values()
-            if record["entity_type"] in allowed
-        ]
+            )
+            if score > 0.0:
+                candidates.append(self._candidate(record, score))
         return sorted(candidates, key=lambda item: (-item.raw_score, item.id))[:limit]
 
     def graph_candidates(
@@ -173,12 +181,10 @@ class JsonDataRepository:
         edges: list[tuple[str, str, str]] = []
         for requirement in self._dataset.requirements:
             edges.extend(
-                (requirement.id, target, "DEPENDS_ON")
-                for target in requirement.dependency_ids
+                (requirement.id, target, "DEPENDS_ON") for target in requirement.dependency_ids
             )
             edges.extend(
-                (requirement.id, target, "APPLIES_TO")
-                for target in requirement.component_ids
+                (requirement.id, target, "APPLIES_TO") for target in requirement.component_ids
             )
             edges.extend((requirement.id, target, "ADDRESSES") for target in requirement.risk_ids)
         for test_case in self._dataset.test_cases:
